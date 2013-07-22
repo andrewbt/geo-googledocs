@@ -54,6 +54,26 @@ var geocoders = {
           return { longitude: '', latitude: '', accuracy: '' };
         }
       }
+    },
+    cicero_ushouse: {
+      query: function(query, key) {
+        return 'https://cicero.azavea.com/v3.1/legislative_district?format=json&key=' + 
+          key + '&search_loc=' + query + '&district_type=NATIONAL_LOWER'; 
+      },
+      parse: function(r) {
+        try {
+          return {
+            longitude: r.response.results.candidates[0].x,
+            latitude: r.response.results.candidates[0].y,
+            accuracy: r.response.results.candidates[0].score,
+            us_house_district: r.response.results.candidates[0].districts[0].label,
+            us_house_state: r.response.results.candidates[0].districts[0].state,
+            us_house_id: r.response.results.candidates[0].districts[0].district_id
+          }
+        } catch(e) {
+          return { longitude: '', latitude: '', accuracy: '', us_house_district: '', us_house_state: '', us_house_id: '' };
+        }
+      }
     }
 };
 
@@ -232,7 +252,8 @@ function gcDialog() {
     .setId('apiBox')
     .addItem('mapquest')
     .addItem('yahoo')
-    .addItem('cicero'));
+    .addItem('cicero')
+    .addItem('cicero_ushouse'));
   grid.setWidget(1, 0, app.createLabel('API key:'));
   grid.setWidget(1, 1, app.createTextBox().setName('keyBox').setId('keyBox'));
 
@@ -286,12 +307,19 @@ function geocode(e) {
   
   var res = getDestCols();
   
-  if (res.long >= 0 && res.lat  >= 0 && res.acc >= 0) {
+  if (res.long >=0 && res.lat >= 0 && res.acc >= 0 && res.ushd != '' && res.ushs != '' && res.ushi != '') {
+    var longCol = (res.long+1),
+        latCol = (res.lat+1),
+        accCol = (res.acc+1),
+        ushdCol = (res.ushd+1),
+        ushsCol = (res.ushs+1),
+        ushiCol = (res.ushi+1);
+  } else if (res.long >= 0 && res.lat  >= 0 && res.acc >= 0) {
     var longCol = (res.long+1),
         latCol = (res.lat+1),
         accCol = (res.acc+1);  
   } else {
-   // Add new columns
+    // Add new columns
     sheet.insertColumnsAfter(lastCol, 3);
     
     // Set new column headers
@@ -303,6 +331,20 @@ function geocode(e) {
     var longCol = (lastCol + 1),
         latCol = (lastCol + 2),
         accCol = (lastCol + 3);
+    
+    //if adding Cicero districts
+    if (api == 'cicero_ushouse') {
+      sheet.insertColumnsAfter(accCol, 3);
+      
+      sheet.getRange(1, accCol + 1, 1, 1).setValue('us_house_district');
+      sheet.getRange(1, accCol + 2, 1, 1).setValue('us_house_state');
+      sheet.getRange(1, accCol + 3, 1, 1).setValue('us_house_id');
+      
+      //set additional destination columns
+      var ushdCol = (accCol + 1),
+          ushsCol = (accCol + 2),
+          ushiCol = (accCol + 3);
+    }
   }
 
   // Don't geocode the first row!
@@ -333,6 +375,13 @@ function geocode(e) {
         sheet.getRange(i + topRow, longCol, 1, 1).setValue(response.longitude);
         sheet.getRange(i + topRow, latCol, 1, 1).setValue(response.latitude);
         sheet.getRange(i + topRow, accCol, 1, 1).setValue(response.accuracy);
+        
+        //if cicero districts
+        if (api == 'cicero_ushouse') {
+          sheet.getRange(i + topRow, ushdCol, 1, 1).setValue(response.us_house_district);
+          sheet.getRange(i + topRow, ushsCol, 1, 1).setValue(response.us_house_state);
+          sheet.getRange(i + topRow, ushiCol, 1, 1).setValue(response.us_house_id);
+        }
       } catch(e) {
         Logger.log(e);
       }
@@ -352,7 +401,10 @@ function getDestCols() {
   var output = {
     'long': include(headers,'geo_longitude'),
     'lat': include(headers,'geo_latitude'),
-    'acc': include(headers,'geo_accuracy')
+    'acc': include(headers,'geo_accuracy'),
+    'ushd': include(headers, 'us_house_district'),
+    'ushs': include(headers, 'us_house_state'),
+    'ushi': include(headers, 'us_house_id')
   };
   
   Logger.log(output.long);
